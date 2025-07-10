@@ -78,11 +78,13 @@ jobs:
           
           if (releaseIssue) {
             console.log('Found release issue:', releaseIssue.number);
+            core.setOutput('issue_number', releaseIssue.number);
             return releaseIssue.number;
           } else {
-            throw new Error(`Release issue for version ${{ github.event.inputs.release_version }} not found`);
+            console.log('Release issue not found, will skip commenting');
+            core.setOutput('issue_number', '0');
+            return 0;
           }
-        result-encoding: string
         
     - name: Get commits since last fix/release
       id: commits
@@ -112,8 +114,8 @@ jobs:
         context: .
         push: true
         tags: |
-          cr.yandex/crp18f0881clcu82u2d8/app:${{ steps.version.outputs.fix_version }}
-          cr.yandex/crp18f0881clcu82u2d8/app:${{ github.event.inputs.release_version }}_latest
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ steps.version.outputs.fix_version }}
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}_latest
           
     - name: Create git tag
       run: |
@@ -126,27 +128,43 @@ jobs:
   comment_issue:
     runs-on: ubuntu-latest
     needs: hotfix
+    if: needs.hotfix.outputs.issue_number != '0'
     
     steps:
     - name: Comment on release issue
       uses: actions/github-script@v7
+      env:
+        REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+        FIX_VERSION: ${{ needs.hotfix.outputs.fix_version }}
+        COMMITS_LIST: ${{ needs.hotfix.outputs.commits_list }}
+        ISSUE_NUMBER: ${{ needs.hotfix.outputs.issue_number }}
       with:
         script: |
+          const registryId = process.env.REGISTRY_ID;
+          const fixVersion = process.env.FIX_VERSION;
+          const commitsList = process.env.COMMITS_LIST;
+          const issueNumber = parseInt(process.env.ISSUE_NUMBER);
+          
+          if (issueNumber === 0) {
+            console.log('No release issue found, skipping comment');
+            return;
+          }
+          
           const commentBody = `## Hotfix Applied 🔧
           
           **Fix Date**: ${new Date().toISOString().split('T')[0]}
           **Fix Author**: @${{ github.actor }}
-          **Fix Version**: ${{ needs.hotfix.outputs.fix_version }}
+          **Fix Version**: ${fixVersion}
           
           ## Docker Image
-          \`cr.yandex/crp18f0881clcu82u2d8/app:${{ needs.hotfix.outputs.fix_version }}\`
+          \`cr.yandex/${registryId}/app:${fixVersion}\`
           
           ## Changes in this Hotfix
-          ${{ needs.hotfix.outputs.commits_list }}
+          ${commitsList}
           
           ## Status
           - Hotfix Docker image built and pushed
-          - Git tag created (\`${{ needs.hotfix.outputs.fix_version }}\`)
+          - Git tag created (\`${fixVersion}\`)
           - Latest tag updated
           - Ready for deployment
           
@@ -156,6 +174,8 @@ jobs:
           await github.rest.issues.createComment({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            issue_number: ${{ needs.hotfix.outputs.issue_number }},
+            issue_number: issueNumber,
             body: commentBody
-          }); 
+          });
+          
+          console.log(`Comment added to issue #${issueNumber}`); 

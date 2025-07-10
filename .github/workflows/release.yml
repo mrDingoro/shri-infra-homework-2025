@@ -91,8 +91,8 @@ jobs:
         context: .
         push: true
         tags: |
-          cr.yandex/crp18f0881clcu82u2d8/app:${{ steps.version.outputs.version }}
-          cr.yandex/crp18f0881clcu82u2d8/app:${{ steps.version.outputs.version }}_latest
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ steps.version.outputs.version }}
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ steps.version.outputs.version }}_latest
           
     - name: Create git tag
       run: |
@@ -123,17 +123,23 @@ jobs:
     steps:
     - name: Create release issue
       uses: actions/github-script@v7
+      env:
+        REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+        VERSION: ${{ needs.release.outputs.release_version }}
       with:
         script: |
+          const registryId = process.env.REGISTRY_ID;
+          const version = process.env.VERSION;
+          
           const issueBody = `## Release Information
           
           **Date**: ${new Date().toISOString().split('T')[0]}
           **Author**: @${{ github.actor }}
-          **Version**: ${{ needs.release.outputs.release_version }}
-          **Release Branch**: \`releases/${{ needs.release.outputs.release_version }}\`
+          **Version**: ${version}
+          **Release Branch**: \`releases/${version}\`
           
           ## Docker Image
-          \`cr.yandex/crp18f0881clcu82u2d8/app:${{ needs.release.outputs.release_version }}\`
+          \`cr.yandex/${registryId}/app:${version}\`
           
           ## Changes in this Release
           ${{ needs.release.outputs.commits_list }}
