@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { useDispatch, useSelector } from "react-redux";
-import { useParams } from "react-router";
+import { useParams } from "react-router-dom";
 import { cn } from "@bem-react/classname";
 
 import { ProductDetails } from "../components/ProductDetails";
