@@ -6,6 +6,7 @@
 
 ## Исправлениия readme
     1) - feature/new-feature (ping)
+    2) - fix/readme (ping)
 
 ## Задача
 
