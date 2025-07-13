@@ -16,32 +16,14 @@ COPY . .
 # Собираем приложение
 RUN npm run build
 
-# Продакшн образ
-FROM node:20-alpine
-
-# Устанавливаем рабочую директорию
-WORKDIR /app
-
-# Копируем package.json для установки только продакшн зависимостей
-COPY package*.json ./
-
 # Устанавливаем только продакшн зависимости
 RUN npm ci --only=production && npm cache clean --force
 
-# Копируем собранное приложение из builder stage
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src/static ./src/static
-
-# Создаем пользователя для безопасности
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
-
-# Меняем владельца файлов
-RUN chown -R nodejs:nodejs /app
-USER nodejs
 
 # Открываем порт
 EXPOSE 3000
+
+ENV NODE_ENV=production
 
 # Команда запуска
 CMD ["npm", "start"]
