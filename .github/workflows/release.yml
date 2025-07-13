@@ -204,13 +204,30 @@ jobs:
         git checkout -b $BRANCH_NAME
 
         # Скопировать CHANGELOG.md из релизной ветки
-        git show releases/$RELEASE_NUMBER:CHANGELOG.md > CHANGELOG.md
+        git show releases/$RELEASE_NUMBER:CHANGELOG.md > new_changelog.md
 
-        # Проверить есть ли изменения
-        if git diff --quiet; then
-          echo "CHANGELOG.md не изменился, PR не нужен"
-          exit 0
+        # Проверить есть ли изменения между текущим и новым CHANGELOG.md
+        if [ -f CHANGELOG.md ]; then
+          # Проверяем, есть ли в текущем CHANGELOG.md релизы (строки начинающиеся с "## [")
+          if grep -q "^## \[" CHANGELOG.md; then
+            # Есть релизы - сравниваем файлы
+            if diff -q CHANGELOG.md new_changelog.md > /dev/null; then
+              echo "CHANGELOG.md не изменился, PR не нужен"
+              rm new_changelog.md
+              exit 0
+            else
+              echo "CHANGELOG.md изменился, создаем PR"
+            fi
+          else
+            # Нет релизов (пустой или только базовое описание) - всегда создаем PR
+            echo "CHANGELOG.md не содержит релизов, создаем PR"
+          fi
+        else
+          echo "CHANGELOG.md не существует в main, создаем PR"
         fi
+
+        # Заменить CHANGELOG.md новым содержимым
+        mv new_changelog.md CHANGELOG.md
 
         # Закоммитить изменения
         git add CHANGELOG.md
