@@ -8,7 +8,7 @@ on:
           Версия релиза для хотфикса в формате semver (например: 1.0.0, 2.1.0)
 
           📍 Где найти:
-          • Actions → "3. Создание релиза" → версия после v
+          • Actions → "2. Создание релиза" → версия после v
           • Issues → "Релиз v1.0.0" → версия после v
           • Code → Tags → последний тег (v1.0.0)
           • Releases → версия релиза
@@ -19,6 +19,11 @@ on:
           Пример: 1.0.0
         required: true
         type: string
+      hotfix_description:
+        description: 'Описание исправлений в хотфиксе (какие баги исправлены)'
+        required: false
+        type: string
+        default: 'Критические исправления'
 
 jobs:
   lint:
@@ -231,6 +236,7 @@ jobs:
           const baseVersion = '${{ github.event.inputs.release_version }}';
           const hotfixVersion = '${{ steps.hotfix_version.outputs.hotfix_version }}';
           const hotfixNumber = '${{ steps.hotfix_version.outputs.hotfix_number }}';
+          const hotfixDescription = '${{ github.event.inputs.hotfix_description }}' || 'Критические исправления';
 
           // Найти issue связанный с релизом
           const { data: issues } = await github.rest.issues.listForRepo({
@@ -255,17 +261,20 @@ jobs:
               **Автор фикса:** @${{ github.actor }}
               **Номер хотфикса:** ${hotfixNumber}
 
-              ### Коммиты:
+              ### 🐛 Описание исправлений:
+              ${hotfixDescription}
+
+              ### 📋 Коммиты:
               ${{ steps.commits.outputs.commits }}
 
-              ### Docker образы:
+              ### 🐳 Docker образы:
               - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${hotfixVersion}\`
               - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${baseVersion}-latest\`
 
-              ### Статус:
-              ✅ Хотфикс создан и готов к деплою
+              ### ✅ Статус:
+              Хотфикс создан и готов к деплою
 
-              **Следующий шаг:** Запустите "4. 🚀 Деплой в продакшн" с версией \`${baseVersion}\`
+              **Следующий шаг:** Запустите "3. 🚀 Деплой в продакшн" с версией \`${baseVersion}\`
               `
             });
 
@@ -288,6 +297,7 @@ jobs:
         script: |
           const baseVersion = '${{ github.event.inputs.release_version }}';
           const hotfixVersion = '${{ steps.hotfix_version.outputs.hotfix_version }}';
+          const hotfixDescription = '${{ github.event.inputs.hotfix_description }}' || 'Критические исправления';
 
           await github.rest.repos.createRelease({
             owner: context.repo.owner,
@@ -298,10 +308,13 @@ jobs:
 
             Исправления для релиза v${baseVersion}
 
-            ### Коммиты:
+            ### 🐛 Описание исправлений:
+            ${hotfixDescription}
+
+            ### 📋 Коммиты:
             ${{ steps.commits.outputs.commits }}
 
-            ### Docker образы:
+            ### 🐳 Docker образы:
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${hotfixVersion}\`
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${baseVersion}-latest\`
             `,

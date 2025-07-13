@@ -16,6 +16,11 @@ on:
           - minor
           - patch
         default: 'patch'
+      changes_description:
+        description: 'Описание изменений в релизе (что нового, что исправлено)'
+        required: false
+        type: string
+        default: 'Обновления и исправления'
 
 permissions:
   contents: write
@@ -186,6 +191,7 @@ jobs:
         script: |
           const version = '${{ github.event.inputs.version }}';
           const versionType = '${{ github.event.inputs.version_type }}';
+          const changesDescription = '${{ github.event.inputs.changes_description }}' || 'Обновления и исправления';
           const { data: issue } = await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -197,16 +203,19 @@ jobs:
             **Версия:** ${version}
             **Тип:** ${versionType}
 
-            ### Коммиты:
+            ### 📝 Описание изменений:
+            ${changesDescription}
+
+            ### 📋 Коммиты:
             ${{ steps.commits.outputs.commits }}
 
-            ### Docker образы:
+            ### 🐳 Docker образы:
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}\`
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}-latest\`
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:latest\`
 
-            ### Статус:
-            ✅ Релиз создан и готов к деплою
+            ### ✅ Статус:
+            Релиз создан и готов к деплою
             `,
             labels: ['release', 'deployment', `version:${version}`]
           });
@@ -217,12 +226,20 @@ jobs:
       run: |
         VERSION="${{ github.event.inputs.version }}"
         VERSION_TYPE="${{ github.event.inputs.version_type }}"
+        CHANGES_DESCRIPTION="${{ github.event.inputs.changes_description }}"
 
         echo "# Changelog" > temp_changelog.md
         echo "" >> temp_changelog.md
         echo "## [v$VERSION] - $(date +'%Y-%m-%d') ($VERSION_TYPE)" >> temp_changelog.md
         echo "" >> temp_changelog.md
-        echo "### Изменения:" >> temp_changelog.md
+
+        if [ ! -z "$CHANGES_DESCRIPTION" ]; then
+          echo "### 📝 Описание изменений:" >> temp_changelog.md
+          echo "$CHANGES_DESCRIPTION" >> temp_changelog.md
+          echo "" >> temp_changelog.md
+        fi
+
+        echo "### 📋 Коммиты:" >> temp_changelog.md
         echo "${{ steps.commits.outputs.commits }}" >> temp_changelog.md
         echo "" >> temp_changelog.md
 
@@ -256,6 +273,8 @@ jobs:
           const version = '${{ github.event.inputs.version }}';
           const versionType = '${{ github.event.inputs.version_type }}';
 
+          const changesDescription = '${{ github.event.inputs.changes_description }}' || 'Обновления и исправления';
+
           await github.rest.repos.createRelease({
             owner: context.repo.owner,
             repo: context.repo.repo,
@@ -263,10 +282,13 @@ jobs:
             name: `Release v${version}`,
             body: `## Релиз v${version} (${versionType})
 
-            ### Коммиты:
+            ### 📝 Описание изменений:
+            ${changesDescription}
+
+            ### 📋 Коммиты:
             ${{ steps.commits.outputs.commits }}
 
-            ### Docker образы:
+            ### 🐳 Docker образы:
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}\`
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}-latest\`
             - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:latest\`
