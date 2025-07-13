@@ -52,8 +52,27 @@ jobs:
     - name: Запустить тесты
       run: npm test
 
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Получить ветку релиза
+      uses: actions/checkout@v4
+
+    - name: Настроить Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Установить зависимости
+      run: npm ci
+
+    - name: Проверить типы
+      run: npx tsc --noEmit
+
   release:
-    needs: [lint, test]
+    needs: [lint, test, typecheck]
     runs-on: ubuntu-latest
 
     steps:
@@ -157,15 +176,13 @@ jobs:
     - name: Обновить CHANGELOG.md
       run: |
         RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
-        cat > temp_changelog.md << EOF
-        # Changelog
-
-        ## [$RELEASE_NUMBER] - $(date +'%Y-%m-%d')
-
-        ### Изменения:
-        ${{ steps.commits.outputs.commits }}
-
-        EOF
+        echo "# Changelog" > temp_changelog.md
+        echo "" >> temp_changelog.md
+        echo "## [$RELEASE_NUMBER] - $(date +'%Y-%m-%d')" >> temp_changelog.md
+        echo "" >> temp_changelog.md
+        echo "### Изменения:" >> temp_changelog.md
+        echo "${{ steps.commits.outputs.commits }}" >> temp_changelog.md
+        echo "" >> temp_changelog.md
 
         if [ -f CHANGELOG.md ]; then
           tail -n +2 CHANGELOG.md >> temp_changelog.md
@@ -178,6 +195,8 @@ jobs:
         git push origin releases/$RELEASE_NUMBER
 
     - name: 📝 Создать PR для обновления CHANGELOG.md в main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
         # Создать новую ветку для обновления CHANGELOG
@@ -186,6 +205,12 @@ jobs:
 
         # Скопировать CHANGELOG.md из релизной ветки
         git show releases/$RELEASE_NUMBER:CHANGELOG.md > CHANGELOG.md
+
+        # Проверить есть ли изменения
+        if git diff --quiet; then
+          echo "CHANGELOG.md не изменился, PR не нужен"
+          exit 0
+        fi
 
         # Закоммитить изменения
         git add CHANGELOG.md
