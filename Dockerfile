@@ -32,10 +32,6 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/static ./src/static
 
-# Копируем серверные файлы (если нужны)
-COPY src/server ./src/server
-COPY src/common ./src/common
-
 # Создаем пользователя для безопасности
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
@@ -48,4 +44,4 @@ USER nodejs
 EXPOSE 3000
 
 # Команда запуска
-CMD ["npm", "start"]
+CMD ["node", "dist/server/index.js"]
