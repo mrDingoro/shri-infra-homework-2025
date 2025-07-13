@@ -2,7 +2,7 @@
   "name": "infra-hw",
   "version": "1.0.0",
   "scripts": {
-    "start": "nodemon",
+    "start": "nodemon src/server/index.ts",
     "build": "webpack --mode=production --node-env=production",
     "watch": "webpack --watch",
     "test": "jest",
