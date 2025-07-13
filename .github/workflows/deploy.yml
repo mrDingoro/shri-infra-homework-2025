@@ -21,7 +21,7 @@ jobs:
       with:
         registry: cr.yandex
         username: json_key
-        password: ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
+        password: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
 
     - name: Проверить существование Docker образа
       run: |
@@ -40,17 +40,17 @@ jobs:
     - name: Настроить SSH
       uses: webfactory/ssh-agent@v0.9.0
       with:
-        ssh-private-key: ${{ secrets.YC_SSH_PRIVATE_KEY }}
+        ssh-private-key: ${{ secrets.VM_SSH_KEY }}
 
     - name: Деплой на продакшн VM
       run: |
         IMAGE_NAME="cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}_latest"
 
-        ssh -o StrictHostKeyChecking=no ${{ secrets.YC_VM_USER }}@${{ secrets.YC_VM_HOST }} << EOF
+        ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << EOF
           echo "🚀 Начинаем деплой образа $IMAGE_NAME"
 
           # Авторизация в Yandex Container Registry
-          echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' | docker login --username json_key --password-stdin cr.yandex
+          echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' | docker login --username json_key --password-stdin cr.yandex
 
           # Остановить и удалить старый контейнер
           docker stop shri-app || true
@@ -108,7 +108,7 @@ jobs:
 
           ### Детали:
           - Docker образ: \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${releaseVersion}_latest\`
-          - Хост: \`${{ secrets.YC_VM_HOST }}\`
+          - Хост: \`${{ secrets.VM_HOST }}\`
           - Контейнер: \`shri-app\`
           - Порт: \`80:3000\`
 

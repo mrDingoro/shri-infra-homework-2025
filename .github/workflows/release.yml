@@ -76,7 +76,7 @@ jobs:
       with:
         registry: cr.yandex
         username: json_key
-        password: ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
+        password: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
 
     - name: Настроить Docker Buildx
       uses: docker/setup-buildx-action@v3
