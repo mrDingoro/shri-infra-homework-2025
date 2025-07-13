@@ -1,12 +1,21 @@
-name: 3. 🏗️ Создание релиза (ручной запуск)
+name: 2. 🏗️ Создание релиза (ручной запуск)
 
 on:
   workflow_dispatch:
     inputs:
-      release_number:
-        description: 'Номер релиза (оставьте пустым для автоматического использования github.run_number)'
-        required: false
+      version:
+        description: 'Версия релиза в формате semver (например: 1.0.0, 2.1.0)'
+        required: true
         type: string
+      version_type:
+        description: 'Тип версии'
+        required: true
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+        default: 'patch'
 
 permissions:
   contents: write
@@ -81,6 +90,23 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Валидация версии
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Неверный формат версии: $VERSION"
+          echo "Используйте формат: 1.0.0, 2.1.0, etc."
+          exit 1
+        fi
+
+        # Проверяем, что версия не существует
+        if git tag -l | grep -q "^v$VERSION$"; then
+          echo "❌ Версия v$VERSION уже существует"
+          exit 1
+        fi
+
+        echo "✅ Версия $VERSION валидна"
+
     - name: Настроить Node.js
       uses: actions/setup-node@v4
       with:
@@ -90,16 +116,23 @@ jobs:
     - name: Установить зависимости
       run: npm ci
 
+    - name: Обновить версию в package.json
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        npm version $VERSION --no-git-tag-version
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json package-lock.json
+        git commit -m "chore: bump version to $VERSION"
+
     - name: Собрать проект
       run: npm run build
 
     - name: Создать ветку релиза
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
-        git checkout -b releases/$RELEASE_NUMBER
-        git push origin releases/$RELEASE_NUMBER
+        VERSION="${{ github.event.inputs.version }}"
+        git checkout -b releases/v$VERSION
+        git push origin releases/v$VERSION
 
     - name: Авторизация в Yandex Container Registry
       uses: docker/login-action@v3
@@ -117,29 +150,32 @@ jobs:
         context: .
         push: true
         tags: |
-          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_number || github.run_number }}
-          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_number || github.run_number }}_latest
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.version }}-latest
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:latest
         platforms: linux/amd64
 
     - name: Создать Git тег
       run: |
-        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
-        git tag $RELEASE_NUMBER
-        git push origin $RELEASE_NUMBER
+        VERSION="${{ github.event.inputs.version }}"
+        git tag v$VERSION
+        git push origin v$VERSION
 
     - name: Получить предыдущий тег релиза
       id: prev_tag
       run: |
-        PREV_TAG=$(git tag --sort=-version:refname | grep -E '^[0-9]+$' | head -2 | tail -1)
+        # Получаем все теги в формате v1.0.0 и сортируем их
+        PREV_TAG=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -2 | head -1)
         if [ -z "$PREV_TAG" ]; then
           PREV_TAG=$(git rev-list --max-parents=0 HEAD)
         fi
         echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+        echo "Предыдущий тег: $PREV_TAG"
 
     - name: Получить коммиты с последнего релиза
       id: commits
       run: |
-        COMMITS=$(git log --oneline ${{ steps.prev_tag.outputs.prev_tag }}..${{ github.sha }} --pretty=format:"- %s (%h)")
+        COMMITS=$(git log --oneline ${{ steps.prev_tag.outputs.prev_tag }}..HEAD --pretty=format:"- %s (%h)")
         echo "commits<<EOF" >> $GITHUB_OUTPUT
         echo "$COMMITS" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -148,37 +184,43 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          const releaseNumber = '${{ github.event.inputs.release_number || github.run_number }}';
+          const version = '${{ github.event.inputs.version }}';
+          const versionType = '${{ github.event.inputs.version_type }}';
           const { data: issue } = await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            title: `Релиз ${releaseNumber}`,
-            body: `## Релиз ${releaseNumber}
+            title: `Релиз v${version}`,
+            body: `## Релиз v${version}
 
             **Дата:** ${new Date().toLocaleString('ru-RU')}
             **Автор релиза:** @${{ github.actor }}
-            **Версия:** ${releaseNumber}
+            **Версия:** ${version}
+            **Тип:** ${versionType}
 
             ### Коммиты:
             ${{ steps.commits.outputs.commits }}
 
-            ### Docker образ:
-            \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${releaseNumber}\`
+            ### Docker образы:
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}\`
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}-latest\`
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:latest\`
 
             ### Статус:
             ✅ Релиз создан и готов к деплою
             `,
-            labels: ['release', 'deployment']
+            labels: ['release', 'deployment', `version:${version}`]
           });
 
           console.log('Создан issue #' + issue.number);
 
     - name: Обновить CHANGELOG.md
       run: |
-        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
+        VERSION="${{ github.event.inputs.version }}"
+        VERSION_TYPE="${{ github.event.inputs.version_type }}"
+
         echo "# Changelog" > temp_changelog.md
         echo "" >> temp_changelog.md
-        echo "## [$RELEASE_NUMBER] - $(date +'%Y-%m-%d')" >> temp_changelog.md
+        echo "## [v$VERSION] - $(date +'%Y-%m-%d') ($VERSION_TYPE)" >> temp_changelog.md
         echo "" >> temp_changelog.md
         echo "### Изменения:" >> temp_changelog.md
         echo "${{ steps.commits.outputs.commits }}" >> temp_changelog.md
@@ -188,7 +230,7 @@ jobs:
         if [ -f CHANGELOG.md ] && [ -s CHANGELOG.md ]; then
           # Файл существует и не пустой
           # Проверяем, есть ли уже релизы (строки начинающиеся с ##)
-          if grep -q "^## \[" CHANGELOG.md; then
+          if grep -q "^## \[v" CHANGELOG.md; then
             # Есть предыдущие релизы - добавляем их после нового релиза
             tail -n +2 CHANGELOG.md >> temp_changelog.md
           else
@@ -204,7 +246,35 @@ jobs:
         mv temp_changelog.md CHANGELOG.md
 
         git add CHANGELOG.md
-        git commit -m "Обновить CHANGELOG.md для релиза $RELEASE_NUMBER"
-        git push origin releases/$RELEASE_NUMBER
+        git commit -m "docs: update CHANGELOG.md for release v$VERSION"
+        git push origin releases/v$VERSION
+
+    - name: Создать GitHub Release
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const version = '${{ github.event.inputs.version }}';
+          const versionType = '${{ github.event.inputs.version_type }}';
+
+          await github.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: `v${version}`,
+            name: `Release v${version}`,
+            body: `## Релиз v${version} (${versionType})
+
+            ### Коммиты:
+            ${{ steps.commits.outputs.commits }}
+
+            ### Docker образы:
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}\`
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${version}-latest\`
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:latest\`
+            `,
+            draft: false,
+            prerelease: false
+          });
+
+          console.log('Создан GitHub Release v' + version);
 
 
