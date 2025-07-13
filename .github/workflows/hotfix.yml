@@ -1,4 +1,4 @@
-name: 5. Управление хотфиксами (ручной запуск)
+name: 5. 🔧 Хотфикс → затем запустить "4. 🚀 Деплой" (ручной запуск)
 
 on:
   workflow_dispatch:
@@ -40,6 +40,27 @@ jobs:
     - name: Запустить линтер
       run: npm run lint
 
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Получить ветку релиза
+      uses: actions/checkout@v4
+      with:
+        ref: releases/${{ github.event.inputs.release_version }}
+
+    - name: Настроить Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Установить зависимости
+      run: npm ci
+
+    - name: Проверить типы
+      run: npx tsc --noEmit
+
   test:
     runs-on: ubuntu-latest
 
@@ -62,7 +83,7 @@ jobs:
       run: npm test
 
   hotfix:
-    needs: [lint, test]
+    needs: [lint, typecheck, test]
     runs-on: ubuntu-latest
 
     steps:
