@@ -44,4 +44,4 @@ USER nodejs
 EXPOSE 3000
 
 # Команда запуска
-CMD ["node", "dist/server/index.js"]
+CMD ["npm", "start"]
