@@ -1,6 +1,6 @@
 {
   "name": "infra-hw",
-  "version": "1.0.1",
+  "version": "1.0.1-hotfix.1",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
