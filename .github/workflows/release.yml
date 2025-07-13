@@ -2,6 +2,16 @@ name: 3. 🏗️ Создание релиза (ручной запуск)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_number:
+        description: 'Номер релиза (оставьте пустым для автоматического использования github.run_number)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   lint:
@@ -68,8 +78,9 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git checkout -b releases/${{ github.run_number }}
-        git push origin releases/${{ github.run_number }}
+        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
+        git checkout -b releases/$RELEASE_NUMBER
+        git push origin releases/$RELEASE_NUMBER
 
     - name: Авторизация в Yandex Container Registry
       uses: docker/login-action@v3
@@ -87,14 +98,15 @@ jobs:
         context: .
         push: true
         tags: |
-          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.run_number }}
-          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.run_number }}_latest
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_number || github.run_number }}
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_number || github.run_number }}_latest
         platforms: linux/amd64
 
     - name: Создать Git тег
       run: |
-        git tag ${{ github.run_number }}
-        git push origin ${{ github.run_number }}
+        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
+        git tag $RELEASE_NUMBER
+        git push origin $RELEASE_NUMBER
 
     - name: Получить предыдущий тег релиза
       id: prev_tag
@@ -117,21 +129,22 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
+          const releaseNumber = '${{ github.event.inputs.release_number || github.run_number }}';
           const { data: issue } = await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            title: `Релиз ${{ github.run_number }}`,
-            body: `## Релиз ${{ github.run_number }}
+            title: `Релиз ${releaseNumber}`,
+            body: `## Релиз ${releaseNumber}
 
             **Дата:** ${new Date().toLocaleString('ru-RU')}
             **Автор релиза:** @${{ github.actor }}
-            **Версия:** ${{ github.run_number }}
+            **Версия:** ${releaseNumber}
 
             ### Коммиты:
             ${{ steps.commits.outputs.commits }}
 
             ### Docker образ:
-            \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.run_number }}\`
+            \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${releaseNumber}\`
 
             ### Статус:
             ✅ Релиз создан и готов к деплою
@@ -143,10 +156,11 @@ jobs:
 
     - name: Обновить CHANGELOG.md
       run: |
+        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
         cat > temp_changelog.md << EOF
         # Changelog
 
-        ## [${{ github.run_number }}] - $(date +'%Y-%m-%d')
+        ## [$RELEASE_NUMBER] - $(date +'%Y-%m-%d')
 
         ### Изменения:
         ${{ steps.commits.outputs.commits }}
@@ -160,19 +174,36 @@ jobs:
         mv temp_changelog.md CHANGELOG.md
 
         git add CHANGELOG.md
-        git commit -m "Обновить CHANGELOG.md для релиза ${{ github.run_number }}"
-        git push origin releases/${{ github.run_number }}
+        git commit -m "Обновить CHANGELOG.md для релиза $RELEASE_NUMBER"
+        git push origin releases/$RELEASE_NUMBER
 
-    - name: Обновить CHANGELOG.md в main
+    - name: 📝 Создать PR для обновления CHANGELOG.md в main
       run: |
-        # Переключиться на main
-        git checkout main
-        git pull origin main
+        RELEASE_NUMBER="${{ github.event.inputs.release_number || github.run_number }}"
+        # Создать новую ветку для обновления CHANGELOG
+        BRANCH_NAME="update-changelog-release-$RELEASE_NUMBER"
+        git checkout -b $BRANCH_NAME
 
         # Скопировать CHANGELOG.md из релизной ветки
-        git show releases/${{ github.run_number }}:CHANGELOG.md > CHANGELOG.md
+        git show releases/$RELEASE_NUMBER:CHANGELOG.md > CHANGELOG.md
 
-        # Закоммитить изменения в main
+        # Закоммитить изменения
         git add CHANGELOG.md
-        git commit -m "Обновить CHANGELOG.md для релиза ${{ github.run_number }}" || echo "Нет изменений для коммита"
-        git push origin main
+        git commit -m "Обновить CHANGELOG.md для релиза $RELEASE_NUMBER"
+        git push origin $BRANCH_NAME
+
+        # Создать Pull Request
+        gh pr create \
+          --title "📝 Обновить CHANGELOG.md для релиза $RELEASE_NUMBER" \
+          --body "Автоматическое обновление CHANGELOG.md после создания релиза $RELEASE_NUMBER
+
+        ### Изменения:
+        - Добавлена запись о релизе $RELEASE_NUMBER
+        - Указаны коммиты включенные в релиз
+        - Добавлена дата релиза: $(date '+%Y-%m-%d')
+
+        Этот PR создан автоматически workflow релиза." \
+          --base main \
+          --head $BRANCH_NAME \
+          --label "release" \
+          --label "changelog"
