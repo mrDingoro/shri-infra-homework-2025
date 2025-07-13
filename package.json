@@ -13,8 +13,7 @@
   "dependencies": {
     "@bem-react/classname": "^1.6.0",
     "@faker-js/faker": "^8.4.1",
-    "@types/express": "^4.17.21",
-    "@types/react-router-dom": "^5.3.3",
+        "@types/express": "^4.17.21",
     "axios": "^1.7.2",
     "bootstrap": "^5.3.3",
     "chai": "^5.1.1",
