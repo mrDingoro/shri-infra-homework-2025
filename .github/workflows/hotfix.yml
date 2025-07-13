@@ -1,20 +1,22 @@
-name: 5. 🔧 Хотфикс → затем запустить "4. 🚀 Деплой" (ручной запуск)
+name: 4. 🔧 Хотфикс → затем запустить "3. 🚀 Деплой" (ручной запуск)
 
 on:
   workflow_dispatch:
     inputs:
       release_version:
         description: |
-          Номер релиза для хотфикса
+          Версия релиза для хотфикса в формате semver (например: 1.0.0, 2.1.0)
 
           📍 Где найти:
-          • Actions → "3. Создание релиза" → номер после #
-          • Issues → "Релиз X" → X это номер
-          • Code → Tags → последний тег
+          • Actions → "3. Создание релиза" → версия после v
+          • Issues → "Релиз v1.0.0" → версия после v
+          • Code → Tags → последний тег (v1.0.0)
+          • Releases → версия релиза
 
           ⚠️ Хотфикс можно делать только для успешно созданных релизов!
+          ⚠️ Указывайте версию БЕЗ префикса 'v' (например: 1.0.0, а не v1.0.0)
 
-          Пример: 2
+          Пример: 1.0.0
         required: true
         type: string
 
@@ -23,10 +25,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Валидация версии
+      run: |
+        VERSION="${{ github.event.inputs.release_version }}"
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Неверный формат версии: $VERSION"
+          echo "Используйте формат: 1.0.0, 2.1.0, etc. (БЕЗ префикса 'v')"
+          exit 1
+        fi
+        echo "✅ Версия $VERSION валидна"
+
     - name: Получить ветку релиза
       uses: actions/checkout@v4
       with:
-        ref: releases/${{ github.event.inputs.release_version }}
+        ref: releases/v${{ github.event.inputs.release_version }}
 
     - name: Настроить Node.js
       uses: actions/setup-node@v4
@@ -44,10 +56,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Валидация версии
+      run: |
+        VERSION="${{ github.event.inputs.release_version }}"
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Неверный формат версии: $VERSION"
+          echo "Используйте формат: 1.0.0, 2.1.0, etc. (БЕЗ префикса 'v')"
+          exit 1
+        fi
+        echo "✅ Версия $VERSION валидна"
+
     - name: Получить ветку релиза
       uses: actions/checkout@v4
       with:
-        ref: releases/${{ github.event.inputs.release_version }}
+        ref: releases/v${{ github.event.inputs.release_version }}
 
     - name: Настроить Node.js
       uses: actions/setup-node@v4
@@ -65,10 +87,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Валидация версии
+      run: |
+        VERSION="${{ github.event.inputs.release_version }}"
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Неверный формат версии: $VERSION"
+          echo "Используйте формат: 1.0.0, 2.1.0, etc. (БЕЗ префикса 'v')"
+          exit 1
+        fi
+        echo "✅ Версия $VERSION валидна"
+
     - name: Получить ветку релиза
       uses: actions/checkout@v4
       with:
-        ref: releases/${{ github.event.inputs.release_version }}
+        ref: releases/v${{ github.event.inputs.release_version }}
 
     - name: Настроить Node.js
       uses: actions/setup-node@v4
@@ -87,11 +119,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Валидация версии
+      run: |
+        VERSION="${{ github.event.inputs.release_version }}"
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Неверный формат версии: $VERSION"
+          echo "Используйте формат: 1.0.0, 2.1.0, etc. (БЕЗ префикса 'v')"
+          exit 1
+        fi
+        echo "✅ Версия $VERSION валидна"
+
     - name: Получить ветку релиза
       uses: actions/checkout@v4
       with:
-        ref: releases/${{ github.event.inputs.release_version }}
+        ref: releases/v${{ github.event.inputs.release_version }}
         fetch-depth: 0
+
+    - name: Вычислить версию хотфикса
+      id: hotfix_version
+      run: |
+        BASE_VERSION="${{ github.event.inputs.release_version }}"
+
+        # Получаем последний номер хотфикса для данной версии
+        LAST_HOTFIX=$(git tag -l "v${BASE_VERSION}-hotfix.*" | sed "s/v${BASE_VERSION}-hotfix\.//" | sort -n | tail -1)
+
+        if [ -z "$LAST_HOTFIX" ]; then
+          HOTFIX_NUMBER=1
+        else
+          HOTFIX_NUMBER=$((LAST_HOTFIX + 1))
+        fi
+
+        HOTFIX_VERSION="${BASE_VERSION}-hotfix.${HOTFIX_NUMBER}"
+        echo "hotfix_version=$HOTFIX_VERSION" >> $GITHUB_OUTPUT
+        echo "hotfix_number=$HOTFIX_NUMBER" >> $GITHUB_OUTPUT
+        echo "Версия хотфикса: v$HOTFIX_VERSION"
 
     - name: Настроить Node.js
       uses: actions/setup-node@v4
@@ -101,6 +162,15 @@ jobs:
 
     - name: Установить зависимости
       run: npm ci
+
+    - name: Обновить версию в package.json
+      run: |
+        HOTFIX_VERSION="${{ steps.hotfix_version.outputs.hotfix_version }}"
+        npm version $HOTFIX_VERSION --no-git-tag-version
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add package.json package-lock.json
+        git commit -m "chore: bump version to $HOTFIX_VERSION (hotfix)"
 
     - name: Собрать проект
       run: npm run build
@@ -121,30 +191,35 @@ jobs:
         context: .
         push: true
         tags: |
-          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}_fix${{ github.run_number }}
-          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}_latest
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ steps.hotfix_version.outputs.hotfix_version }}
+          cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}-latest
         platforms: linux/amd64
 
     - name: Создать Git тег
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git tag ${{ github.event.inputs.release_version }}_fix${{ github.run_number }}
-        git push origin ${{ github.event.inputs.release_version }}_fix${{ github.run_number }}
+        HOTFIX_VERSION="${{ steps.hotfix_version.outputs.hotfix_version }}"
+        git tag v$HOTFIX_VERSION
+        git push origin v$HOTFIX_VERSION
 
     - name: Получить предыдущий тег релиза/фикса
       id: prev_tag
       run: |
-        PREV_TAG=$(git tag --sort=-version:refname | grep -E '^${{ github.event.inputs.release_version }}(_fix[0-9]+)?$' | head -2 | tail -1)
+        BASE_VERSION="${{ github.event.inputs.release_version }}"
+
+        # Получаем все теги для данной версии (включая хотфиксы) и сортируем их
+        PREV_TAG=$(git tag -l "v${BASE_VERSION}*" | grep -E "^v${BASE_VERSION}(-hotfix\.[0-9]+)?$" | sort -V | tail -2 | head -1)
+
         if [ -z "$PREV_TAG" ]; then
-          PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          PREV_TAG="v${BASE_VERSION}"
         fi
+
         echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+        echo "Предыдущий тег: $PREV_TAG"
 
     - name: Получить коммиты с последнего релиза/фикса
       id: commits
       run: |
-        COMMITS=$(git log --oneline ${{ steps.prev_tag.outputs.prev_tag }}..${{ github.sha }} --pretty=format:"- %s (%h)")
+        COMMITS=$(git log --oneline ${{ steps.prev_tag.outputs.prev_tag }}..HEAD --pretty=format:"- %s (%h)")
         echo "commits<<EOF" >> $GITHUB_OUTPUT
         echo "$COMMITS" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
@@ -153,6 +228,10 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
+          const baseVersion = '${{ github.event.inputs.release_version }}';
+          const hotfixVersion = '${{ steps.hotfix_version.outputs.hotfix_version }}';
+          const hotfixNumber = '${{ steps.hotfix_version.outputs.hotfix_number }}';
+
           // Найти issue связанный с релизом
           const { data: issues } = await github.rest.issues.listForRepo({
             owner: context.repo.owner,
@@ -162,7 +241,7 @@ jobs:
           });
 
           const releaseIssue = issues.find(issue =>
-            issue.title.includes(`Релиз ${{ github.event.inputs.release_version }}`)
+            issue.title.includes(`Релиз v${baseVersion}`)
           );
 
           if (releaseIssue) {
@@ -170,23 +249,64 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: releaseIssue.number,
-              body: `## 🔧 Хотфикс ${{ github.event.inputs.release_version }}_fix${{ github.run_number }}
+              body: `## 🔧 Хотфикс v${hotfixVersion}
 
               **Дата фикса:** ${new Date().toLocaleString('ru-RU')}
               **Автор фикса:** @${{ github.actor }}
+              **Номер хотфикса:** ${hotfixNumber}
 
               ### Коммиты:
               ${{ steps.commits.outputs.commits }}
 
-              ### Docker образ:
-              \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${{ github.event.inputs.release_version }}_fix${{ github.run_number }}\`
+              ### Docker образы:
+              - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${hotfixVersion}\`
+              - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${baseVersion}-latest\`
 
               ### Статус:
               ✅ Хотфикс создан и готов к деплою
+
+              **Следующий шаг:** Запустите "4. 🚀 Деплой в продакшн" с версией \`${baseVersion}\`
               `
+            });
+
+            // Добавляем лейбл хотфикса
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: releaseIssue.number,
+              labels: [`hotfix:${hotfixVersion}`]
             });
 
             console.log('Обновлен issue #' + releaseIssue.number);
           } else {
-            console.log('Не найден связанный issue для версии ${{ github.event.inputs.release_version }}');
+            console.log('Не найден связанный issue для версии v' + baseVersion);
           }
+
+    - name: Создать GitHub Release для хотфикса
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const baseVersion = '${{ github.event.inputs.release_version }}';
+          const hotfixVersion = '${{ steps.hotfix_version.outputs.hotfix_version }}';
+
+          await github.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: `v${hotfixVersion}`,
+            name: `Hotfix v${hotfixVersion}`,
+            body: `## Хотфикс v${hotfixVersion}
+
+            Исправления для релиза v${baseVersion}
+
+            ### Коммиты:
+            ${{ steps.commits.outputs.commits }}
+
+            ### Docker образы:
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${hotfixVersion}\`
+            - \`cr.yandex/${{ secrets.YC_REGISTRY_ID }}/app:${baseVersion}-latest\`
+            `,
+            draft: false,
+            prerelease: false
+          });
+
+          console.log('Создан GitHub Release v' + hotfixVersion);
