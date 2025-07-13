@@ -1,4 +1,4 @@
-name: Проверка PR
+name: 1. Проверка PR (автоматически)
 
 on:
   pull_request:
