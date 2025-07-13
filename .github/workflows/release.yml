@@ -184,8 +184,21 @@ jobs:
         echo "${{ steps.commits.outputs.commits }}" >> temp_changelog.md
         echo "" >> temp_changelog.md
 
-        if [ -f CHANGELOG.md ]; then
-          tail -n +2 CHANGELOG.md >> temp_changelog.md
+        # Проверяем, существует ли CHANGELOG.md и не пустой ли он
+        if [ -f CHANGELOG.md ] && [ -s CHANGELOG.md ]; then
+          # Файл существует и не пустой
+          # Проверяем, есть ли уже релизы (строки начинающиеся с ##)
+          if grep -q "^## \[" CHANGELOG.md; then
+            # Есть предыдущие релизы - добавляем их после нового релиза
+            tail -n +2 CHANGELOG.md >> temp_changelog.md
+          else
+            # Это базовый CHANGELOG без релизов - добавляем описание после нового релиза
+            # Пропускаем заголовок и добавляем остальное
+            tail -n +2 CHANGELOG.md >> temp_changelog.md
+          fi
+        else
+          # Файл не существует или пустой - добавляем комментарий
+          echo "<!-- Предыдущие релизы будут добавлены здесь -->" >> temp_changelog.md
         fi
 
         mv temp_changelog.md CHANGELOG.md
@@ -205,6 +218,16 @@ jobs:
 
         # Скопировать CHANGELOG.md из релизной ветки
         git show releases/$RELEASE_NUMBER:CHANGELOG.md > new_changelog.md
+
+        # Отладочная информация
+        echo "=== Отладка CHANGELOG.md ==="
+        echo "Размер текущего CHANGELOG.md: $(wc -c < CHANGELOG.md 2>/dev/null || echo 0)"
+        echo "Размер нового CHANGELOG.md: $(wc -c < new_changelog.md)"
+        echo "Содержимое текущего CHANGELOG.md:"
+        cat CHANGELOG.md || echo "(файл не существует)"
+        echo "Содержимое нового CHANGELOG.md:"
+        cat new_changelog.md
+        echo "=== Конец отладки ==="
 
         # Проверить есть ли изменения между текущим и новым CHANGELOG.md
         if [ -f CHANGELOG.md ]; then
